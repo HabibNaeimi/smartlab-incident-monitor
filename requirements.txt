@@ -1,0 +1,2 @@
+# Dependencies used by currently implemented shared runtime code.
+paho-mqtt==2.1.0

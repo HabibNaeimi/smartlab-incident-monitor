@@ -1,0 +1,24 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local virtual environments
+.venv/
+venv/
+env/
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+
+# Docker-generated runtime state
+infra/influxdb/data/
+infra/influxdb/config/
+infra/mosquitto/data/
+infra/mosquitto/log/

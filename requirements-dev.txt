@@ -1,0 +1,3 @@
+# Runtime dependencies plus local testing tools.
+-r requirements.txt
+pytest==9.1.1
