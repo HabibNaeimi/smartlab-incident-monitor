@@ -305,13 +305,11 @@ explicitly. Full MQTT reliability remains F05 work.
 ```bash
 python -m pytest -q tests/unit/common/config/test_loader.py
 python -m pytest -q tests/unit/common/config
-git diff --check
-git diff --check origin/main
 ```
 
-Final F01 result on Python 3.12.14: 101 loader tests and 204 configuration/import
-tests overall. The original 112 tests remain. Fresh-interpreter checks reject
-environment/file/network/client/UUID/logging setup during shared imports.
+Final F01 result on Python 3.12.14: 101 loader tests and 198 configuration tests
+overall. The original 112 tests remain. Shared imports were smoke-checked
+manually; there is no automated import-safety test module in the agreed scope.
 
 Run this public-API smoke check from the repository root. It creates a temporary
 bootstrap file and needs no broker, database, real token, or running service:
