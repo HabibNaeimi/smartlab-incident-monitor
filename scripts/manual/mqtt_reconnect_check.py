@@ -1,11 +1,19 @@
 from common.clients.mqtt.mqtt_client import MQTTClient
+import logging
 import time
 
 def handler(msg):
     print(msg.topic, msg.payload.decode())
 
 def main():
-    client = MQTTClient()
+    logging.basicConfig(level=logging.INFO)
+    # Explicit local settings for this diagnostic, not an application fallback.
+    client = MQTTClient(
+        clientID="smartlab-manual-reconnect",
+        host="localhost",
+        port=1883,
+        site="polito-smartlab",
+    )
     client.set_message_handler(handler)
     client.connect()
     time.sleep(1)
