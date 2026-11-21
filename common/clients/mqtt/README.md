@@ -1,4 +1,27 @@
-# MQTT Client helper
+# MQTT Client helper checkpoint
+
+The helper uses Paho callback API version 2. Importing this module does not read
+environment values, create a client, connect, or configure application logging.
+
+Application callers must pass `clientID`, `host`, `port`, and keyword-only `site`
+explicitly. Broker/session values come from Service Catalog global configuration;
+topic helpers require explicit keyword arguments `root` and `site`. There are no
+environment-derived defaults. `AppConfig` contains local bootstrap and secrets,
+not discovered broker configuration.
+
+The manual reconnection diagnostic supplies its own explicit local settings.
+It is not an example of production service discovery.
+
+Current behavior includes connection callbacks, subscription tracking,
+resubscription after connection, JSON publication, and one raw-message handler.
+The handler currently receives a Paho message; JSON decoding and handler error
+isolation are not implemented yet.
+
+F05 completes per-publication QoS, checked publication results, bounded startup
+retry, malformed-message rejection, handler isolation, and real broker checks.
+The current `qos` constructor default is provisional; it does not override the
+topic-specific requirements in `docs/contracts/TOPICS.md`.
+
 
 ## Design structure
 ### Handeling Responsibilites
@@ -37,7 +60,5 @@ The MQTT helper should decode JSON dict.
 - Reject malformed JSON clearly and log topic/payload context
 
 
-
-
 ## Config
-- Imported through the rooted .env
+- Suppliy through Service Catalog.

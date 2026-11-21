@@ -204,3 +204,144 @@ Service Catalog loads its tracked bootstrap JSON and last valid atomic snapshot,
 | Advanced reliability | Bounded retries, metrics/logging, and idempotency without a DLQ/outbox | Stable IDs and persistence-before-publication ordering. |
 
 Changing one of these internal implementations without changing its stable boundary is not a version 1 contract break. Introducing a new externally visible field, state, topic, endpoint, or ownership rule follows [`README.md`](README.md) change control.
+
+
+# Implementation Guide
+
+## Startup flow
+
+Call the loader once in the service entry point, before starting clients or
+workers. Pass the same returned object to registration retries and heartbeats.
+
+```python
+from common.config import load_config
+
+def main():
+    config = load_config()
+    # Register using config.bootstrap and config.service_id.
+    # Reuse config; do not call load_config() inside a retry loop.
+```
+
+`load_config(source)` is also available for tests and explicit startup mappings.
+An explicit mapping is the complete local input: even `{}` does not fall back
+to the process environment. The loader does not automatically read `.env` or
+contact Service Catalog. Environment values are read only when called.
+
+## Bootstrap precedence
+
+Only four fields are accepted in optional bootstrap JSON:
+
+```json
+{
+  "SERVICE_NAME": "dashboard",
+  "INSTANCE_ID": "dashboard-01",
+  "BASE_URL": "http://localhost:8090",
+  "SERVICE_CATALOG_URL": "http://localhost:8081"
+}
+```
+
+Set `SERVICE_BOOTSTRAP_PATH` in the explicit mapping or process environment to
+use a file. A blank path means no file. A supplied invalid/unreadable file fails
+before environment overrides are applied, even if all four values exist there.
+Unknown keys, secrets, and non-string file values are rejected.
+
+| File value | Environment value | Result |
+| --- | --- | --- |
+| Present | Missing or whitespace-only | Use file value. |
+| Present | Non-blank | Use environment value, then validate. |
+| Missing | Non-blank | Use environment value, then validate. |
+| Missing or blank | Missing or blank | Raise `ConfigurationError`. |
+
+The resolver copies file values and never mutates the input mapping or file.
+An invalid non-blank override fails; it does not fall back to the valid file
+value. Bootstrap strings are stripped by the existing readers.
+
+Service names are 1-63 lowercase alphanumeric characters in kebab case.
+Instance IDs are 1-63 lowercase letters/digits/underscores/hyphens, starting and
+ending with a letter or digit. Neither permits `/`, `+`, or `#`.
+The loader checks identifier syntax; the canonical application names are listed
+in the configuration contract. A syntactically valid unrecognized name receives
+no secrets.
+
+URLs use the existing `get_url()` validation: HTTP or HTTPS, a host and valid
+port syntax, no embedded credentials, whitespace, query, fragment, or trailing
+slash. For `service-catalog`, `SERVICE_CATALOG_URL` must equal `BASE_URL` exactly.
+
+## Secret ownership
+
+| Service | Populated field | Input | Requirement |
+| --- | --- | --- | --- |
+| `ingestion` | `secrets.influxdb_token` | `INFLUXDB_TOKEN` | Required and non-blank. |
+| `telegram-bot` | `secrets.telegram_bot_token` | `TELEGRAM_BOT_TOKEN` | Required and non-blank. |
+| `agentic-ai` | `secrets.llm_api_key` | `LLM_API_KEY` | Optional here; selected provider validates its requirement before network startup. |
+| Other services | None | None | All secret fields stay `None`. |
+
+Unowned secret inputs are ignored, including malformed ones. Secret values are
+not stripped: surrounding whitespace is rejected. Blank optional keys become
+`None`. No infrastructure admin-token fallback is performed.
+
+The returned dataclasses are frozen. Secret fields stay out of `repr()`, and
+loader errors name the variable without printing its value. This is not a safe
+serialization format: do not log `config.secrets`, `dataclasses.asdict(config)`,
+the source mapping, or raw environment values. Future Compose service definitions
+must pass each secret only to its owner; filtering the returned object does not
+remove variables from the process environment.
+
+## Service identity and discovered configuration
+
+After successful validation, each `load_config()` call creates one lowercase
+`svc_`-prefixed UUIDv4. Load once at startup and retain the result. A new startup
+load produces a new process record ID; `INSTANCE_ID` remains deployment identity.
+An environment `SERVICE_ID` cannot replace the generated identifier.
+
+Broker host/port/session settings, site ID, topic root, and peer addresses are
+not loaded into `AppConfig`. Services obtain them through Service Catalog in
+later features. Shared MQTT imports no longer read environment values or set
+up logging. Callers must pass broker identity/settings and topic root/site
+explicitly. Full MQTT reliability remains F05 work.
+
+## Verification
+
+```bash
+python -m pytest -q tests/unit/common/config/test_loader.py
+python -m pytest -q tests/unit/common/config
+git diff --check
+git diff --check origin/main
+```
+
+Final F01 result on Python 3.12.14: 101 loader tests and 204 configuration/import
+tests overall. The original 112 tests remain. Fresh-interpreter checks reject
+environment/file/network/client/UUID/logging setup during shared imports.
+
+Run this public-API smoke check from the repository root. It creates a temporary
+bootstrap file and needs no broker, database, real token, or running service:
+
+```bash
+python - <<'PY'
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from common.config import load_config
+
+with TemporaryDirectory() as directory:
+    path = Path(directory) / "bootstrap.json"
+    path.write_text(json.dumps({
+        "SERVICE_NAME": "dashboard",
+        "INSTANCE_ID": "dashboard-01",
+        "BASE_URL": "http://localhost:8090",
+        "SERVICE_CATALOG_URL": "http://localhost:8081",
+    }), encoding="utf-8")
+    config = load_config({
+        "SERVICE_BOOTSTRAP_PATH": str(path),
+        "INSTANCE_ID": "dashboard-02",
+        "SERVICE_NAME": "  ",
+    })
+    assert config.bootstrap.service_name == "dashboard"
+    assert config.bootstrap.instance_id == "dashboard-02"
+    print("configuration smoke: passed")
+PY
+```
+
+Python 3.11 remains the minimum language target. This execution environment has
+Python 3.12.14, so a separate Python 3.11 runtime run is not claimed. No Docker or
+live MQTT check is required for this local configuration feature.
