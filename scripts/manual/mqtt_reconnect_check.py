@@ -11,7 +11,7 @@ def main():
     client = MQTTClient(
         clientID="smartlab-manual-reconnect",
         host="localhost",
-        port=1883,
+        port=18883,
         site="polito-smartlab",
     )
     client.set_message_handler(handler)
