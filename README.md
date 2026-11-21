@@ -12,6 +12,8 @@ The project is in its foundation phase. The repository currently contains:
 * MQTT topic-construction utilities;
 * Docker Compose definitions for Mosquitto 2 and InfluxDB 2;
 * an authored Mosquitto configuration;
+* a validated shared bootstrap/configuration loader with scoped secrets;
+* automated configuration and import-safety tests;
 * an incomplete Device Catalog scaffold;
 * a manual MQTT reconnection diagnostic;
 * local environment and development dependency templates.
@@ -28,7 +30,7 @@ The following are **not yet implemented as working services**:
 * Response Manager;
 * dashboard;
 * Telegram bot;
-* automated unit, integration, and end-to-end tests.
+* service integration and end-to-end tests.
 
 The current Docker Compose file still uses legacy host bind mounts for generated broker and database state. The stack should remain stopped until these mounts are migrated to named Docker volumes and health checks are added.
 
@@ -50,7 +52,7 @@ The final platform will follow these constraints:
 
 ## Local Python Setup
 
-The currently verified development environment uses Python 3.11.
+Application code targets Python 3.11+. The F01 checks were run on Python 3.12.14.
 
 Create and activate a virtual environment if needed:
 
@@ -79,12 +81,37 @@ Replace every `CHANGE_ME` value before starting infrastructure.
 
 The real `.env` file must remain local and must never be committed or included in a source archive.
 
+Python does not automatically read `.env`. `load_config()` reads an explicit
+mapping or the process environment when called at service startup. The root
+template combines infrastructure examples with one example service bootstrap;
+it must not be passed wholesale to every future service container.
+
+See [configuration usage and review notes](docs/configuration.md) for precedence,
+secret ownership, startup identity, and a broker-free smoke check.
+
+## Automated Checks
+
+Run from the repository root, using the project environment:
+
+```bash
+python -m pytest -q tests/unit/common/config
+git diff --check
+git diff --check origin/main
+```
+
+F01 verification: **204 tests passed**, including the existing 112-test baseline.
+This covers configuration and shared import behavior. Broker, database, and
+application-service integration are verified in later features.
+
+The implementation checkpoint and next action are recorded in
+[docs/progress.md](docs/progress.md).
+
 ## Repository Policy
 
 * Python caches, virtual environments, local secrets, and Docker-generated runtime state are ignored.
 * Ordinary test files are not ignored.
-* Reviewed architecture and interface contracts will live under `docs/contracts/`.
-* Automated tests will live under `tests/`.
+* Reviewed architecture and interface contracts live under `docs/contracts/`.
+* Automated tests live under `tests/`.
 * Manual operational checks live under `scripts/manual/` and are not treated as automated tests.
 * Generated Mosquitto databases and InfluxDB configuration/data are not application source.
 
